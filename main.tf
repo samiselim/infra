@@ -82,15 +82,35 @@ resource "aws_instance" "privateEC2-1" {
   }
 }
 resource "aws_instance" "privateEC2-2" {
-  ami             = data.aws_ami.aws_image_latest.id
+  ami             = "ami-0062b622072515714"
   instance_type   = "t2.medium"
   subnet_id       = module.vpc.private_subnet_ids[0]
   security_groups = [module.sg.sg_id]
   key_name = "new-key"
 
   user_data = <<-EOF
-      #!/bin/bash
-      $(cat install-kubeadm.sh)
+        #!/bin/bash
+        sudo apt update
+        sudo apt install docker.io -y
+        sudo systemctl start docker
+        sudo systemctl enable docker
+
+
+        curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+        echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
+        sudo apt update
+
+        sudo apt install kubeadm kubelet kubectl -y
+        sudo apt-mark hold kubeadm kubelet kubectl
+        sudo swapoff -a
+
+        sudo kubeadm init
+
+        mkdir -p $HOME/.kube
+        sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+        sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+        kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
     EOF
 
   root_block_device {
